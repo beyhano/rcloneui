@@ -1,28 +1,33 @@
-import {useState} from 'react';
-import logo from './assets/images/logo-universal.png';
-import './App.css';
-import {Greet} from "../wailsjs/go/main/App";
+import {useEffect, useState} from 'react';
+import {ListRemotes} from "../wailsjs/go/main/App";
 
 function App() {
-    const [resultText, setResultText] = useState("Please enter your name below 👇");
-    const [name, setName] = useState('');
-    const updateName = (e: any) => setName(e.target.value);
-    const updateResultText = (result: string) => setResultText(result);
+    const [remotes, setRemotes] = useState<string[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
-    function greet() {
-        Greet(name).then(updateResultText);
-    }
+    useEffect(() => {
+        ListRemotes()
+            .then(setRemotes)
+            .catch((e: Error) => setError(e.message))
+            .finally(() => setLoading(false));
+    }, []);
 
     return (
-        <div id="App">
-            <img src={logo} id="logo" alt="logo"/>
-            <div id="result" className="result">{resultText}</div>
-            <div id="input" className="input-box">
-                <input id="name" className="input" onChange={updateName} autoComplete="off" name="input" type="text"/>
-                <button className="btn" onClick={greet}>Greet</button>
-            </div>
+        <div id="app">
+            <h1>rcloneui</h1>
+            {loading && <p>Yükleniyor...</p>}
+            {error && <p className="error">{error}</p>}
+            {!loading && !error && remotes.length === 0 && (
+                <p>Henüz remote yapılandırılmamış.</p>
+            )}
+            {remotes.length > 0 && (
+                <ul>
+                    {remotes.map(r => <li key={r}>{r}</li>)}
+                </ul>
+            )}
         </div>
-    )
+    );
 }
 
 export default App

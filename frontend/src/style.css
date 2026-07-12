@@ -7,20 +7,30 @@ html {
 body {
     margin: 0;
     color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
     "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
-}
-
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 400;
-    src: local(""),
-    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
 }
 
 #app {
     height: 100vh;
     text-align: center;
+    padding: 2rem;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    padding: 0.5rem;
+    margin: 0.25rem auto;
+    max-width: 400px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.error {
+    color: #ff6b6b;
 }

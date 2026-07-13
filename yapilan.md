@@ -84,6 +84,31 @@
   - `prompt(title, inputLabel, inputPlaceholder?)` — Metin giriş dialog'u
 - Dark/light mode'u otomatik algılar (`.dark` class'ına göre arka plan/rengi ayarlar)
 
+## 8. SQLite Veritabanı
+
+- `modernc.org/sqlite` (pure Go, CGo yok) ile eklendi
+- `db.go` — `initDB()`, `closeDB()`, `~/.cache/rcloneui/rcloneui.db` konumunda
+- Tablo: `scheduled_tasks` (id, name, enabled, source, dest, mode, cron_expr)
+- Wails binding'leri:
+  - `ListScheduledTasks()` → `ScheduledTask[]`
+  - `SaveScheduledTask(task)` → `id`
+  - `DeleteScheduledTask(id)`
+- `app.go` — startup'ta `initDB()`, shutdown'da `closeDB()`
+
+## 9. Sağlayıcı Wizard'ı (Frontend)
+
+- `src/pages/Wizard.tsx` — 3 adımlı wizard dialog
+  - **Adım 1:** Sağlayıcı seç (arama + kart listesi, `config/providers` API'si)
+  - **Adım 2:** Parametreleri doldur (string/bool/CommaSepList/password türlerine göre dinamik form, required/advanced ayrımı)
+  - **Adım 3:** Remote adı girip `config/create` ile kaydet
+- shadcn component'leri: Dialog, Card, Input, Select, Label, ScrollArea
+
+## 10. Sistem Tepsisi Düzeltmeleri
+
+- **Çıkış çalışıyor**, "Pencereyi Aç" düzeltildi: `gtk_window_present` ile pencere öne getiriliyor
+- X basınca kapanma sorunu çözüldü: `OnBeforeClose` → `runtime.WindowHide` + `return true`
+- `libayatana-appindicator` runtime warning'i `g_log_set_handler` ile susturuldu
+
 ## Notlar
 
 - **Sharefile backend** Go 1.25'te `tzdata` hatası verir, `backend/all` import edilemez

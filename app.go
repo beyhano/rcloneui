@@ -86,12 +86,16 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	librclone.Initialize()
+	if err := initDB(); err != nil {
+		println("DB init error:", err.Error())
+	}
 	a.startTray(ctx)
 }
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
 	librclone.Finalize()
+	closeDB()
 }
 
 // RpcCall calls any rclone RC method with a JSON request body.
@@ -125,6 +129,66 @@ func (a *App) ListRemotes() ([]string, error) {
 		return nil, err
 	}
 	return resp.Remotes, nil
+}
+
+// ScheduledTask represents a scheduled sync/copy/backup job
+type ScheduledTask struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Enabled  bool   `json:"enabled"`
+	Source   string `json:"source"`
+	Dest     string `json:"dest"`
+	Mode     string `json:"mode"`
+	CronExpr string `json:"cron_expr"`
+}
+
+// ListScheduledTasks returns all scheduled tasks
+func (a *App) ListScheduledTasks() ([]ScheduledTask, error) {
+	rows, err := DB.Query(`SELECT id, name, enabled, source, dest, mode, cron_expr FROM scheduled_tasks ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []ScheduledTask
+	for rows.Next() {
+		var t ScheduledTask
+		var enabled int
+		if err := rows.Scan(&t.ID, &t.Name, &enabled, &t.Source, &t.Dest, &t.Mode, &t.CronExpr); err != nil {
+			return nil, err
+		}
+		t.Enabled = enabled == 1
+		tasks = append(tasks, t)
+	}
+	return tasks, rows.Err()
+}
+
+// SaveScheduledTask inserts or updates a scheduled task
+func (a *App) SaveScheduledTask(t ScheduledTask) (int64, error) {
+	if t.ID > 0 {
+		_, err := DB.Exec(`UPDATE scheduled_tasks SET name=?, enabled=?, source=?, dest=?, mode=?, cron_expr=?, updated_at=datetime('now') WHERE id=?`,
+			t.Name, boolToInt(t.Enabled), t.Source, t.Dest, t.Mode, t.CronExpr, t.ID)
+		return t.ID, err
+	}
+	res, err := DB.Exec(`INSERT INTO scheduled_tasks (name, enabled, source, dest, mode, cron_expr) VALUES (?, ?, ?, ?, ?, ?)`,
+		t.Name, boolToInt(t.Enabled), t.Source, t.Dest, t.Mode, t.CronExpr)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// DeleteScheduledTask removes a scheduled task by ID
+func (a *App) DeleteScheduledTask(id int64) error {
+	_, err := DB.Exec(`DELETE FROM scheduled_tasks WHERE id=?`, id)
+	return err
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // rpcError implements error for RPC failures

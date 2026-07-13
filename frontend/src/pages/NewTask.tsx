@@ -28,7 +28,7 @@ const intervals = [
     {value: "custom", label: "Özel cron..."},
 ];
 
-export default function NewTask({onBack}: {onBack: () => void}) {
+export default function NewTask({editTask, onBack}: {editTask?: any; onBack: () => void}) {
     const [remotes, setRemotes] = useState<string[]>([]);
     const [name, setName] = useState("");
     const [srcRemote, setSrcRemote] = useState("");
@@ -38,6 +38,28 @@ export default function NewTask({onBack}: {onBack: () => void}) {
     const [mode, setMode] = useState("sync");
     const [cron, setCron] = useState("*/30 * * * *");
     const [customCron, setCustomCron] = useState("");
+    const [excludes, setExcludes] = useState("");
+
+    useEffect(() => {
+        if (!editTask) return;
+        const s = editTask.source || "";
+        const d = editTask.dest || "";
+        const parseFs = (fs: string) => {
+            const i = fs.indexOf(":");
+            if (i > 0) return {remote: fs.slice(0, i), path: fs.slice(i + 1).replace(/^\//, "")};
+            return {remote: "local", path: fs.replace(/^\//, "")};
+        };
+        const src = parseFs(s);
+        const dst = parseFs(d);
+        setSrcRemote(src.remote);
+        setSrcPath(src.path);
+        setDstRemote(dst.remote);
+        setDstPath(dst.path);
+        setMode(editTask.mode || "sync");
+        setCron(editTask.cron_expr || "*/30 * * * *");
+        setExcludes(editTask.excludes || "");
+        setName(editTask.name || "");
+    }, [editTask]);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -53,13 +75,14 @@ export default function NewTask({onBack}: {onBack: () => void}) {
             const srcFs = srcRemote === "local" ? `/${srcPath}` : `${srcRemote}:${srcPath}`;
             const dstFs = dstRemote === "local" ? `/${dstPath}` : `${dstRemote}:${dstPath}`;
             const task = {
-                id: 0,
+                id: editTask?.id || 0,
                 name: name || `${srcRemote} → ${dstRemote}`,
                 enabled: true,
                 source: srcFs,
                 dest: dstFs,
                 mode,
                 cron_expr: cronValue,
+                excludes,
             };
             await SaveScheduledTask(task);
             toastSuccess("Görev kaydedildi");
@@ -69,7 +92,7 @@ export default function NewTask({onBack}: {onBack: () => void}) {
         } finally {
             setSaving(false);
         }
-    }, [name, srcRemote, srcPath, dstRemote, dstPath, mode, cronValue, onBack]);
+    }, [name, srcRemote, srcPath, dstRemote, dstPath, mode, cronValue, excludes, editTask, onBack]);
 
     return (
         <div className="flex flex-col h-full">
@@ -138,6 +161,27 @@ export default function NewTask({onBack}: {onBack: () => void}) {
                         {dstRemote && (
                             <PathBrowser remote={dstRemote} path={dstPath} onPathChange={setDstPath}/>
                         )}
+                    </CardContent>
+                </Card>
+
+                {/* Excludes */}
+                <Card>
+                    <CardHeader className="p-3 pb-2">
+                        <CardTitle className="text-sm font-medium">🔇 Göz Ardı Edilecekler</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-0 space-y-2">
+                        <textarea
+                            className="w-full min-h-[60px] rounded-lg border border-input bg-background px-3 py-2 text-xs font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                            value={excludes}
+                            onChange={(e) => setExcludes(e.target.value)}
+                            placeholder={`*.tmp
+node_modules/
+.git/
+*.log`}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                            Her satıra bir desen. rclone exclude filter formatında.
+                        </p>
                     </CardContent>
                 </Card>
 

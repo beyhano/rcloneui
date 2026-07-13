@@ -140,11 +140,12 @@ type ScheduledTask struct {
 	Dest     string `json:"dest"`
 	Mode     string `json:"mode"`
 	CronExpr string `json:"cron_expr"`
+	Excludes string `json:"excludes"`
 }
 
 // ListScheduledTasks returns all scheduled tasks
 func (a *App) ListScheduledTasks() ([]ScheduledTask, error) {
-	rows, err := DB.Query(`SELECT id, name, enabled, source, dest, mode, cron_expr FROM scheduled_tasks ORDER BY id`)
+	rows, err := DB.Query(`SELECT id, name, enabled, source, dest, mode, cron_expr, excludes FROM scheduled_tasks ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +155,7 @@ func (a *App) ListScheduledTasks() ([]ScheduledTask, error) {
 	for rows.Next() {
 		var t ScheduledTask
 		var enabled int
-		if err := rows.Scan(&t.ID, &t.Name, &enabled, &t.Source, &t.Dest, &t.Mode, &t.CronExpr); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &enabled, &t.Source, &t.Dest, &t.Mode, &t.CronExpr, &t.Excludes); err != nil {
 			return nil, err
 		}
 		t.Enabled = enabled == 1
@@ -166,12 +167,12 @@ func (a *App) ListScheduledTasks() ([]ScheduledTask, error) {
 // SaveScheduledTask inserts or updates a scheduled task
 func (a *App) SaveScheduledTask(t ScheduledTask) (int64, error) {
 	if t.ID > 0 {
-		_, err := DB.Exec(`UPDATE scheduled_tasks SET name=?, enabled=?, source=?, dest=?, mode=?, cron_expr=?, updated_at=datetime('now') WHERE id=?`,
-			t.Name, boolToInt(t.Enabled), t.Source, t.Dest, t.Mode, t.CronExpr, t.ID)
+		_, err := DB.Exec(`UPDATE scheduled_tasks SET name=?, enabled=?, source=?, dest=?, mode=?, cron_expr=?, excludes=?, updated_at=datetime('now') WHERE id=?`,
+			t.Name, boolToInt(t.Enabled), t.Source, t.Dest, t.Mode, t.CronExpr, t.Excludes, t.ID)
 		return t.ID, err
 	}
-	res, err := DB.Exec(`INSERT INTO scheduled_tasks (name, enabled, source, dest, mode, cron_expr) VALUES (?, ?, ?, ?, ?, ?)`,
-		t.Name, boolToInt(t.Enabled), t.Source, t.Dest, t.Mode, t.CronExpr)
+	res, err := DB.Exec(`INSERT INTO scheduled_tasks (name, enabled, source, dest, mode, cron_expr, excludes) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		t.Name, boolToInt(t.Enabled), t.Source, t.Dest, t.Mode, t.CronExpr, t.Excludes)
 	if err != nil {
 		return 0, err
 	}

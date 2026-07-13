@@ -412,7 +412,7 @@ export default function Wizard({open, editRemote, onClose}: {open: boolean; edit
                 <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/20 shrink-0">
                     <Button variant="outline" size="sm"
                         onClick={step === 0 ? onClose : () => setStep(step - 1)}>
-                        {step === 0 ? <><ArrowLeft className="size-4 mr-1"/> İptal</> : <><ArrowLeft className="size-4 mr-1"/> Geri</>}
+                        {step === 0 ? <><ArrowLeft data-icon="inline-start"/> İptal</> : <><ArrowLeft data-icon="inline-start"/> Geri</>}
                     </Button>
                     <div className="flex items-center gap-2">
                         {step < 2 ? (

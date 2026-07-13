@@ -8,6 +8,7 @@ export namespace main {
 	    dest: string;
 	    mode: string;
 	    cron_expr: string;
+	    excludes: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ScheduledTask(source);
@@ -22,6 +23,7 @@ export namespace main {
 	        this.dest = source["dest"];
 	        this.mode = source["mode"];
 	        this.cron_expr = source["cron_expr"];
+	        this.excludes = source["excludes"];
 	    }
 	}
 

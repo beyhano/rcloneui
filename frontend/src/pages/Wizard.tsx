@@ -17,14 +17,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import {Label} from "@/components/ui/label";
-import {ScrollArea} from "@/components/ui/scroll-area";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
+import {Dialog, DialogContent} from "@/components/ui/dialog";
 import {toastSuccess, toastError} from "@/lib/swal";
 import {
     Search,
@@ -113,7 +106,7 @@ function groupProvider(p: Provider): string {
     return "Diğer";
 }
 
-export default function Wizard({open, onClose}: {open: boolean; onClose: () => void}) {
+export default function Wizard({open, editRemote, onClose}: {open: boolean; editRemote?: string; onClose: () => void}) {
     const [step, setStep] = useState(0);
     const [providers, setProviders] = useState<Provider[]>([]);
     const [search, setSearch] = useState("");
@@ -129,11 +122,33 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
             setSearch(""); setRemoteName(""); setShowAdvanced(false);
             return;
         }
-        RpcCall("config/providers", "").then((res) => {
+        (async () => {
+            const res = await RpcCall("config/providers", "");
             const data: ProvidersResponse = JSON.parse(res);
             setProviders(data.providers.filter((p) => !p.Name.startsWith("local")));
-        });
-    }, [open]);
+
+            if (editRemote) {
+                const dump = JSON.parse(await RpcCall("config/dump", ""));
+                const cfg = dump[editRemote];
+                if (cfg) {
+                    const prov = data.providers.find((p) => p.Name === cfg.type);
+                    if (prov) {
+                        setSelected(prov);
+                        const vals: Record<string, string> = {};
+                        for (const o of prov.Options) {
+                            const v = cfg[o.Name];
+                            if (v !== undefined && v !== null) vals[o.Name] = String(v);
+                            else if (o.DefaultStr) vals[o.Name] = o.DefaultStr;
+                        }
+                        setValues(vals);
+                        setRemoteName(editRemote);
+                        setStep(1);
+                        return;
+                    }
+                }
+            }
+        })();
+    }, [open, editRemote]);
 
     const grouped = useMemo(() => {
         const q = search.toLowerCase();
@@ -150,7 +165,7 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
     }, [providers, search]);
 
     const reqFields = useMemo(
-        () => selected?.Options.filter((o) => o.Required && !o.Advanced) ?? [],
+        () => selected?.Options.filter((o) => !o.Advanced) ?? [],
         [selected],
     );
     const advFields = useMemo(
@@ -171,18 +186,19 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
         if (!selected || !remoteName.trim()) return;
         setSaving(true);
         try {
-            const params: Record<string, string> = {type: selected.Name};
+            const params: Record<string, string> = {};
             for (const o of selected.Options) {
                 const v = values[o.Name];
                 if (v && v !== o.DefaultStr) params[o.Name] = v;
             }
-            const req = JSON.stringify({name: remoteName.trim(), parameters: params, options: {}});
-            const res = await RpcCall("config/create", req);
+            const method = editRemote ? "config/update" : "config/create";
+            const req = JSON.stringify({name: remoteName.trim(), type: selected.Name, parameters: params});
+            const res = await RpcCall(method, req);
             const data = JSON.parse(res);
             if (data.error) {
                 toastError(data.error);
             } else {
-                toastSuccess(`"${remoteName.trim()}" eklendi`);
+                toastSuccess(`"${remoteName.trim()}" ${editRemote ? "güncellendi" : "eklendi"}`);
                 onClose();
             }
         } catch (e: unknown) {
@@ -190,7 +206,7 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
         } finally {
             setSaving(false);
         }
-    }, [selected, remoteName, values, onClose]);
+    }, [selected, remoteName, values, editRemote, onClose]);
 
     const setVal = useCallback((name: string, v: string | null) => {
         if (v === null) return;
@@ -251,7 +267,7 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-            <DialogContent className="max-w-3xl !max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
+            <DialogContent className="!max-w-[900px] !w-[90vw] max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
                 {/* Step indicator */}
                 <div className="flex items-center gap-0 px-6 pt-4 pb-3 border-b shrink-0">
                     {steps.map((s, i) => (
@@ -272,69 +288,53 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
                     ))}
                 </div>
 
-                {/* Body */}
-                <div className="flex-1 overflow-hidden min-h-0">
+                {/* Scrollable Body */}
+                <div className="flex-1 overflow-y-auto min-h-0 p-5">
                     {step === 0 && (
-                        <div className="h-full flex flex-col p-6 pt-4 gap-3 min-h-0">
-                            <div className="relative">
+                        <div className="flex flex-col gap-3">
+                            <div className="relative shrink-0">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground"/>
                                 <Input className="pl-9" placeholder="Sağlayıcı ara (örn: google, s3, sftp)..."
                                     value={search} onChange={(e) => setSearch(e.target.value)} autoFocus/>
                             </div>
-                            <ScrollArea className="flex-1 -mx-6 px-6 min-h-0">
-                                {Object.entries(grouped).length === 0 && (
-                                    <div className="flex items-center justify-center h-20 text-muted-foreground text-sm">
-                                        Sonuç bulunamadı
-                                    </div>
-                                )}
-                                {Object.entries(grouped).map(([group, items]) => (
-                                    <div key={group} className="mb-4">
-                                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                                            {group}
-                                        </h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
-                                            {items.map((p) => {
-                                                const Icn = providerIcon(p.Name);
-                                                return (
-                                                    <Card key={p.Name}
-                                                        className={`cursor-pointer hover:bg-accent transition-all border-l-4
-                                                            ${categoryColors[group] || "border-l-border"}
-                                                            ${selected?.Name === p.Name
-                                                                ? "ring-2 ring-primary shadow-md scale-[1.02]"
-                                                                : "hover:scale-[1.01] shadow-sm"}`}
-                                                        onClick={() => selectProvider(p)}>
-                                                        <CardHeader className="p-3 pb-2">
-                                                            <div className="flex items-start justify-between">
-                                                                <div className="flex items-center gap-2">
-                                                                    <Icn className="size-4 text-muted-foreground shrink-0 mt-0.5"/>
-                                                                    <CardTitle className="text-sm font-medium leading-tight">
-                                                                        {p.Description || p.Name}
-                                                                    </CardTitle>
-                                                                </div>
-                                                                {selected?.Name === p.Name && (
-                                                                    <Check className="size-4 text-primary shrink-0"/>
-                                                                )}
+                            {Object.entries(grouped).length === 0 && (
+                                <div className="flex items-center justify-center h-20 text-muted-foreground text-sm">Sonuç bulunamadı</div>
+                            )}
+                            {Object.entries(grouped).map(([group, items]) => (
+                                <div key={group}>
+                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{group}</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                                        {items.map((p) => {
+                                            const Icn = providerIcon(p.Name);
+                                            return (
+                                                <Card key={p.Name}
+                                                    className={`cursor-pointer hover:bg-accent transition-all border-l-4 ${categoryColors[group] || "border-l-border"}
+                                                        ${selected?.Name === p.Name ? "ring-2 ring-primary shadow-md" : "hover:shadow-sm"}`}
+                                                    onClick={() => selectProvider(p)}>
+                                                    <CardHeader className="p-3 pb-2">
+                                                        <div className="flex items-start justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <Icn className="size-4 text-muted-foreground shrink-0 mt-0.5"/>
+                                                                <CardTitle className="text-sm font-medium leading-tight">{p.Description || p.Name}</CardTitle>
                                                             </div>
-                                                        </CardHeader>
-                                                        <CardContent className="px-3 pb-3">
-                                                            <CardDescription className="text-[11px] font-mono">
-                                                                {p.Name}
-                                                            </CardDescription>
-                                                        </CardContent>
-                                                    </Card>
-                                                );
-                                            })}
-                                        </div>
+                                                            {selected?.Name === p.Name && <Check className="size-4 text-primary shrink-0"/>}
+                                                        </div>
+                                                    </CardHeader>
+                                                    <CardContent className="px-3 pb-3">
+                                                        <CardDescription className="text-[11px] font-mono">{p.Name}</CardDescription>
+                                                    </CardContent>
+                                                </Card>
+                                            );
+                                        })}
                                     </div>
-                                ))}
-                            </ScrollArea>
+                                </div>
+                            ))}
                         </div>
                     )}
 
                     {step === 1 && selected && (
-                        <div className="h-full flex flex-col p-6 pt-4">
-                            {/* Provider info header */}
-                            <div className="flex items-center gap-3 mb-5 pb-4 border-b">
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center gap-3 pb-3 border-b shrink-0">
                                 <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center">
                                     <Icon className="size-5 text-primary"/>
                                 </div>
@@ -343,85 +343,67 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
                                     <p className="text-xs text-muted-foreground font-mono">{selected.Name}</p>
                                 </div>
                             </div>
-
-                            <ScrollArea className="flex-1 -mx-6 px-6">
-                                <div className="space-y-4 pb-4">
-                                    {reqFields.map((o) => (
-                                        <div key={o.Name}>
-                                            <Label className="text-sm font-medium">
-                                                {o.Help.split("\n")[0]}
-                                                {o.Required && <span className="text-destructive ml-0.5">*</span>}
-                                            </Label>
-                                            <div className="mt-1.5">{renderField(o)}</div>
-                                        </div>
-                                    ))}
-
-                                    {advFields.length > 0 && (
-                                        <div className="pt-2">
-                                            <Button
-                                                variant="ghost" size="sm"
-                                                onClick={() => setShowAdvanced(!showAdvanced)}
-                                                className="text-xs text-muted-foreground h-auto py-1 px-0 hover:text-foreground"
-                                            >
-                                                {showAdvanced ? "Gizle" : `Göster`} — {advFields.length} gelişmiş ayar
-                                            </Button>
-                                            {showAdvanced && (
-                                                <div className="space-y-4 mt-3 pl-3 border-l-2 border-muted">
-                                                    {advFields.map((o) => (
-                                                        <div key={o.Name}>
-                                                            <Label className="text-sm">{o.Help.split("\n")[0]}</Label>
-                                                            <div className="mt-1.5">{renderField(o)}</div>
-                                                        </div>
-                                                    ))}
+                            {reqFields.map((o) => (
+                                <div key={o.Name}>
+                                    <Label className="text-sm font-medium">{o.Help.split("\n")[0]}{o.Required && <span className="text-destructive ml-0.5">*</span>}</Label>
+                                    <div className="mt-1.5">{renderField(o)}</div>
+                                </div>
+                            ))}
+                            {advFields.length > 0 && (
+                                <div className="pt-2">
+                                    <Button variant="ghost" size="sm" onClick={() => setShowAdvanced(!showAdvanced)}
+                                        className="text-xs text-muted-foreground h-auto py-1 px-0 hover:text-foreground">
+                                        {showAdvanced ? "Gizle" : `Göster`} — {advFields.length} gelişmiş ayar
+                                    </Button>
+                                    {showAdvanced && (
+                                        <div className="space-y-4 mt-3 pl-3 border-l-2 border-muted">
+                                            {advFields.map((o) => (
+                                                <div key={o.Name}>
+                                                    <Label className="text-sm">{o.Help.split("\n")[0]}</Label>
+                                                    <div className="mt-1.5">{renderField(o)}</div>
                                                 </div>
-                                            )}
+                                            ))}
                                         </div>
                                     )}
                                 </div>
-                            </ScrollArea>
+                            )}
                         </div>
                     )}
 
                     {step === 2 && (
-                        <div className="h-full flex flex-col p-6 pt-4">
-                            <div className="space-y-5">
-                                <div>
-                                    <Label className="text-base font-semibold">Remote Adı</Label>
-                                    <Input
-                                        className="mt-1.5 text-lg"
-                                        value={remoteName}
-                                        onChange={(e) => setRemoteName(e.target.value)}
-                                        placeholder={selected ? `ornek-${selected.Name}` : ""}
-                                        autoFocus
-                                    />
-                                    <p className="text-xs text-muted-foreground mt-1.5">
-                                        Bu ad ile rclone komutlarında kullanacaksın. Örn: <code className="bg-muted px-1 rounded text-[11px]">rclone ls google-diskim:</code>
-                                    </p>
-                                </div>
-
-                                {selected && (
-                                    <Card className="bg-muted/30">
-                                        <CardHeader className="p-4 pb-3">
-                                            <div className="flex items-center gap-2">
-                                                <Icon className="size-4 text-primary"/>
-                                                <CardTitle className="text-sm">{selected.Description || selected.Name}</CardTitle>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent className="p-4 pt-0">
-                                            <div className="space-y-1.5">
-                                                {Object.entries(values).filter(([, v]) => v).map(([k, v]) => (
-                                                    <div key={k} className="flex justify-between text-sm">
-                                                        <span className="text-muted-foreground font-mono text-xs">{k}</span>
-                                                        <span className="font-mono text-xs truncate ml-4 max-w-[250px] text-right">
-                                                            {k.toLowerCase().includes("secret") || k.toLowerCase().includes("pass") ? "••••••" : v}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                )}
+                        <div className="flex flex-col gap-5">
+                            <div>
+                                <Label className="text-base font-semibold">Remote Adı</Label>
+                                <Input className="mt-1.5 text-lg" value={remoteName}
+                                    onChange={(e) => setRemoteName(e.target.value)}
+                                    placeholder={selected ? `ornek-${selected.Name}` : ""} autoFocus/>
+                                <p className="text-xs text-muted-foreground mt-1.5">
+                                    Bu ad ile rclone komutlarında kullanacaksın. Örn:
+                                    <code className="bg-muted px-1 rounded text-[11px] ml-1">rclone ls google-diskim:</code>
+                                </p>
                             </div>
+                            {selected && (
+                                <Card className="bg-muted/30">
+                                    <CardHeader className="p-4 pb-3">
+                                        <div className="flex items-center gap-2">
+                                            <Icon className="size-4 text-primary"/>
+                                            <CardTitle className="text-sm">{selected.Description || selected.Name}</CardTitle>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="p-4 pt-0">
+                                        <div className="space-y-1.5">
+                                            {Object.entries(values).filter(([, v]) => v).map(([k, v]) => (
+                                                <div key={k} className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground font-mono text-xs">{k}</span>
+                                                    <span className="font-mono text-xs truncate ml-4 max-w-[250px] text-right">
+                                                        {k.toLowerCase().includes("secret") || k.toLowerCase().includes("pass") ? "\u2022\u2022\u2022\u2022\u2022\u2022" : v}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
                         </div>
                     )}
                 </div>
@@ -432,16 +414,13 @@ export default function Wizard({open, onClose}: {open: boolean; onClose: () => v
                         onClick={step === 0 ? onClose : () => setStep(step - 1)}>
                         {step === 0 ? <><ArrowLeft className="size-4 mr-1"/> İptal</> : <><ArrowLeft className="size-4 mr-1"/> Geri</>}
                     </Button>
-
                     <div className="flex items-center gap-2">
                         {step < 2 ? (
-                            <Button size="sm" disabled={step === 0 && !selected}
-                                onClick={() => setStep(step + 1)}>
+                            <Button size="sm" disabled={step === 0 && !selected} onClick={() => setStep(step + 1)}>
                                 Devam <ArrowRight className="size-4 ml-1"/>
                             </Button>
                         ) : (
-                            <Button size="sm" disabled={!remoteName.trim() || saving}
-                                onClick={save}>
+                            <Button size="sm" disabled={!remoteName.trim() || saving} onClick={save}>
                                 {saving ? "Kaydediliyor..." : "Remote'u Kaydet"}
                             </Button>
                         )}

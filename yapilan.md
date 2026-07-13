@@ -86,9 +86,9 @@
 
 ## 8. SQLite Veritabanı
 
-- `modernc.org/sqlite` (pure Go, CGo yok) ile eklendi
+- `modernc.org/sqlite` (pure Go) ile eklendi
 - `db.go` — `initDB()`, `closeDB()`, `~/.cache/rcloneui/rcloneui.db` konumunda
-- Tablo: `scheduled_tasks` (id, name, enabled, source, dest, mode, cron_expr)
+- Tablo: `scheduled_tasks` (id, name, enabled, source, dest, mode, cron_expr, excludes)
 - Wails binding'leri:
   - `ListScheduledTasks()` → `ScheduledTask[]`
   - `SaveScheduledTask(task)` → `id`
@@ -98,10 +98,11 @@
 ## 9. Sağlayıcı Wizard'ı (Frontend)
 
 - `src/pages/Wizard.tsx` — 3 adımlı wizard dialog
-  - **Adım 1:** Sağlayıcı seç (arama + kart listesi, `config/providers` API'si)
+  - **Adım 1:** Sağlayıcı seç (arama + kart listesi, gruplara ayrılmış, `config/providers` API'si)
   - **Adım 2:** Parametreleri doldur (string/bool/CommaSepList/password türlerine göre dinamik form, required/advanced ayrımı)
-  - **Adım 3:** Remote adı girip `config/create` ile kaydet
-- shadcn component'leri: Dialog, Card, Input, Select, Label, ScrollArea
+  - **Adım 3:** Remote adı girip `config/create` veya `config/update` ile kaydet
+- Edit mode: mevcut remote'u düzenlemek için `config/dump` ile verileri alıp ön doldurma
+- shadcn component'leri: Dialog, Card, Input, Select, Label, Separator
 
 ## 10. Sistem Tepsisi Düzeltmeleri
 
@@ -109,8 +110,38 @@
 - X basınca kapanma sorunu çözüldü: `OnBeforeClose` → `runtime.WindowHide` + `return true`
 - `libayatana-appindicator` runtime warning'i `g_log_set_handler` ile susturuldu
 
+## 11. Zamanlanmış Görevler (Scheduled Tasks)
+
+- `src/pages/NewTask.tsx` — görev oluşturma/düzenleme sayfası
+  - Kaynak remote + PathBrowser ile klasör seçimi (`operations/list` API)
+  - Hedef remote + PathBrowser ile klasör seçimi
+  - İşlem türü: Sync, Copy, Move, Bisync
+  - Zamanlama: hazır aralıklar veya özel cron ifadesi
+  - **Göz ardı edilecekler** — exclude pattern listesi (`_filter.ExcludeRule` ile sync'e iletilir)
+  - Edit mode: mevcut görevi düzenleme (SaveScheduledTask ID korunarak update)
+- `src/components/PathBrowser.tsx` — remote/local dosya gezgini
+  - Klasör listeleme, içine girme, geri gitme
+  - Gizli dosyaları göster/gizle toggle (`.` ile başlayanlar)
+  - Manuel path girme
+- Progress bar: görev çalışırken kart altında canlı ilerleme çubuğu (core/stats + job/status polling)
+- Navigasyon: Remote / Görev tab'ları arasında geçiş
+
+## 12. Remote Yönetimi (Ana Sayfa)
+
+- Remote listesi: ad + tip gösterimi
+- Düzenleme (kalem butonu) → Wizard'ı edit mode'da açar
+- Silme (çöp butonu) → onay dialog'u sonrası `config/delete`
+
+## 13. shadcn/ui İyileştirmeleri
+
+- `data-icon="inline-start"` kullanımı — buton ikonlarında manuel boyut/spacing yok
+- `cn()` ile conditional class'lar
+- İkonlar buton dışında kullanılmıyorsa boyutlandırma shadcn'e bırakıldı
+- Mevcut component'ler: Button, Card, Dialog, Input, Select, Label, ScrollArea, Separator
+
 ## Notlar
 
 - **Sharefile backend** Go 1.25'te `tzdata` hatası verir, `backend/all` import edilemez
 - **libayatana runtime warning** (`deprecated`) önemsiz, `libayatana-appindicator-glib` sistemde yok
 - **Tek binary** (~86MB) — rclone backends + Wails runtime + frontend hepsi içinde
+- **Rclone RC API** — sync işlemlerinde exclude için `_filter.ExcludeRule` kullanılır (not `Exclude` veya `_excludeFilters`)

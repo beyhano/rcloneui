@@ -86,6 +86,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	librclone.Initialize()
+	a.startTray(ctx)
 }
 
 // shutdown is called when the app is closing
